@@ -15,6 +15,17 @@ import { QuizBuilderModal } from './components/QuizBuilderModal';
 import { QuestionReviewModal } from './components/QuestionReviewModal';
 import { Room, Quiz, Participant, RoomMode, ParticipantAnswer } from './types';
 import { DEFAULT_QUIZZES } from './data/defaultQuizzes';
+import {
+  createLocalRoom,
+  joinLocalRoom,
+  submitLocalAnswer,
+  startLocalRoom,
+  nextQuestionLocalRoom,
+  endLocalRoom,
+  kickLocalParticipant,
+  finishLocalParticipant,
+  subscribeToLocalRoom
+} from './utils/roomEngine';
 
 export default function App() {
   // App views: 'entry' | 'lobby' | 'playing' | 'leaderboard' | 'host'
@@ -23,7 +34,7 @@ export default function App() {
   // Participant State
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantName, setParticipantName] = useState<string>('');
-  const [participantAvatar, setParticipantAvatar] = useState<string>('🚀');
+  const [participantAvatar, setParticipantAvatar] = useState<string>('P');
   const [participantColor, setParticipantColor] = useState<string>('#6366F1');
 
   // Room State
@@ -52,6 +63,7 @@ export default function App() {
   // SSE Event Source & Polling Ref
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
+  const localUnsubRef = useRef<(() => void) | null>(null);
 
   // Parse URL search params on first load
   useEffect(() => {
@@ -90,35 +102,40 @@ export default function App() {
     });
   };
 
-  // Real-time synchronization (SSE with fallback polling)
+  // Real-time synchronization (SSE + Polling + Local BroadcastChannel fallback)
   useEffect(() => {
     if (!currentRoomCode) return;
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
+    if (eventSourceRef.current) eventSourceRef.current.close();
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (localUnsubRef.current) localUnsubRef.current();
+
+    // Subscribe to local sync engine (handles multi-tab & Vercel)
+    localUnsubRef.current = subscribeToLocalRoom(currentRoomCode, (updatedRoom) => {
+      handleIncomingRoomUpdate(updatedRoom);
+    });
 
     const sseUrl = `/api/rooms/${currentRoomCode}/events`;
-    const es = new EventSource(sseUrl);
-    eventSourceRef.current = es;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(sseUrl);
+      eventSourceRef.current = es;
 
-    es.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'ROOM_UPDATE' && payload.room) {
-          handleIncomingRoomUpdate(payload.room);
-        }
-      } catch {}
-    };
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ROOM_UPDATE' && payload.room) {
+            handleIncomingRoomUpdate(payload.room);
+          }
+        } catch {}
+      };
 
-    es.onerror = () => {
-      es.close();
-    };
+      es.onerror = () => {
+        if (es) es.close();
+      };
+    } catch {}
 
-    // Polling fallback every 3 seconds in case SSE disconnected
+    // Polling fallback
     const fetchRoom = async () => {
       try {
         const res = await fetch(`/api/rooms/${currentRoomCode}`);
@@ -136,6 +153,7 @@ export default function App() {
     return () => {
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (localUnsubRef.current) localUnsubRef.current();
     };
   }, [currentRoomCode, participantId]);
 
@@ -171,20 +189,30 @@ export default function App() {
     }
   };
 
-  // Join Room as Participant
+  // Join Room as Participant (Hybrid API + Local)
   const handleJoinRoom = async (code: string, name: string, avatar: string, color: string) => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const res = await fetch(`/api/rooms/${code}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, avatar, color })
-      });
+      let data: { participant: Participant; room: Room } | null = null;
+      try {
+        const res = await fetch(`/api/rooms/${code}/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, avatar, color })
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {}
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to join room.');
+      // Fallback to local room engine for Vercel static deployments
+      if (!data || !data.room) {
+        data = joinLocalRoom(code, name, avatar, color);
+      }
+
+      if (!data || !data.room) {
+        throw new Error('Failed to join room.');
       }
 
       setParticipantId(data.participant.id);
@@ -208,26 +236,36 @@ export default function App() {
     }
   };
 
-  // Host Launches Room
+  // Host Launches Room (Hybrid API + Local)
   const handleLaunchRoom = async (quiz: Quiz, mode: RoomMode, allowLateJoin: boolean, showLeaderboard: boolean) => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const res = await fetch('/api/rooms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostName: participantName || 'Quiz Master',
-          quiz,
-          mode,
-          allowLateJoin,
-          showLeaderboardAfterEach: showLeaderboard
-        })
-      });
+      let data: { room: Room; code: string; hostId: string } | null = null;
+      try {
+        const res = await fetch('/api/rooms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostName: participantName || 'Quiz Master',
+            quiz,
+            mode,
+            allowLateJoin,
+            showLeaderboardAfterEach: showLeaderboard
+          })
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {}
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create room.');
+      // Local engine fallback for Vercel
+      if (!data || !data.room) {
+        data = createLocalRoom(participantName || 'Quiz Master', quiz, mode, allowLateJoin, showLeaderboard);
+      }
+
+      if (!data || !data.room) {
+        throw new Error('Failed to create room.');
       }
 
       setRoom(data.room);
@@ -245,58 +283,86 @@ export default function App() {
 
   // Host Starts Room
   const handleStartActiveRoom = async () => {
-    if (!currentRoomCode || !hostSecretId) return;
+    if (!currentRoomCode) return;
     try {
       const res = await fetch(`/api/rooms/${currentRoomCode}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId: hostSecretId })
       });
-      const data = await res.json();
-      if (data.room) setRoom(data.room);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRoom(data.room);
+          return;
+        }
+      }
     } catch {}
+    const updated = startLocalRoom(currentRoomCode);
+    if (updated) setRoom(updated);
   };
 
   // Host Advances Next Question
   const handleHostNextQuestion = async () => {
-    if (!currentRoomCode || !hostSecretId) return;
+    if (!currentRoomCode) return;
     try {
       const res = await fetch(`/api/rooms/${currentRoomCode}/next-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId: hostSecretId })
       });
-      const data = await res.json();
-      if (data.room) setRoom(data.room);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRoom(data.room);
+          return;
+        }
+      }
     } catch {}
+    const updated = nextQuestionLocalRoom(currentRoomCode);
+    if (updated) setRoom(updated);
   };
 
   // Host Ends Active Room
   const handleEndActiveRoom = async () => {
-    if (!currentRoomCode || !hostSecretId) return;
+    if (!currentRoomCode) return;
     try {
       const res = await fetch(`/api/rooms/${currentRoomCode}/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId: hostSecretId })
       });
-      const data = await res.json();
-      if (data.room) setRoom(data.room);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRoom(data.room);
+          return;
+        }
+      }
     } catch {}
+    const updated = endLocalRoom(currentRoomCode);
+    if (updated) setRoom(updated);
   };
 
   // Host Kicks Participant
   const handleKickParticipant = async (pId: string) => {
-    if (!currentRoomCode || !hostSecretId) return;
+    if (!currentRoomCode) return;
     try {
       const res = await fetch(`/api/rooms/${currentRoomCode}/kick`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId: hostSecretId, participantId: pId })
       });
-      const data = await res.json();
-      if (data.room) setRoom(data.room);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) {
+          setRoom(data.room);
+          return;
+        }
+      }
     } catch {}
+    const updated = kickLocalParticipant(currentRoomCode, pId);
+    if (updated) setRoom(updated);
   };
 
   // Participant Submits Answer
@@ -314,14 +380,19 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
-      if (data.room) {
-        setRoom(data.room);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.room) setRoom(data.room);
+        return data.answer || null;
       }
-      return data.answer || null;
-    } catch {
-      return null;
+    } catch {}
+
+    const localResult = submitLocalAnswer(currentRoomCode, participantId, questionId, selectedIndex, timeTakenSec);
+    if (localResult) {
+      setRoom(localResult.room);
+      return localResult.answer;
     }
+    return null;
   };
 
   // Participant Advances to Next Question or Finishes
@@ -341,6 +412,7 @@ export default function App() {
           body: JSON.stringify({ participantId })
         });
       } catch {}
+      finishLocalParticipant(currentRoomCode, participantId);
       setCurrentView('leaderboard');
     }
   };
@@ -349,6 +421,7 @@ export default function App() {
   const handleExitRoom = () => {
     if (eventSourceRef.current) eventSourceRef.current.close();
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (localUnsubRef.current) localUnsubRef.current();
     setParticipantId(null);
     setCurrentRoomCode('');
     setRoom(null);

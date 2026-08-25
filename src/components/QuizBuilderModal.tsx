@@ -425,34 +425,17 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Question Meta: Timer & Explanation */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    {/* Question Meta: Explanation */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          ⏱️ Time Limit
-                        </label>
-                        <select
-                          value={q.timeLimit || 20}
-                          onChange={(e) => handleQuestionChange(qIdx, 'timeLimit', Number(e.target.value))}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                        >
-                          <option value={10}>10 Seconds (Speed)</option>
-                          <option value={15}>15 Seconds</option>
-                          <option value={20}>20 Seconds (Standard)</option>
-                          <option value={30}>30 Seconds</option>
-                          <option value={60}>60 Seconds (Complex)</option>
-                        </select>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                          💡 Explanation / Fun Fact (Optional)
+                          Explanation / Fun Fact (Optional)
                         </label>
                         <input
                           type="text"
                           value={q.explanation || ''}
                           onChange={(e) => handleQuestionChange(qIdx, 'explanation', e.target.value)}
-                          placeholder="Show players why this answer is correct after they vote"
+                          placeholder="Show players why this answer is correct after they submit their choice"
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                         />
                       </div>

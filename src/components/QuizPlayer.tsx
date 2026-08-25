@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Flame, Award, CheckCircle2, XCircle, ArrowRight, Zap, Lightbulb } from 'lucide-react';
+import { Flame, Award, CheckCircle2, XCircle, ArrowRight, Zap, Lightbulb } from 'lucide-react';
 import { QuizQuestion, ParticipantAnswer } from '../types';
 import { sounds } from '../utils/audio';
 
@@ -24,61 +24,26 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
   onNextQuestion,
   isLastQuestion
 }) => {
-  const [timeLeft, setTimeLeft] = useState(question.timeLimit || 20);
   const [isAnswered, setIsAnswered] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [submittedResult, setSubmittedResult] = useState<ParticipantAnswer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const startTimeRef = useRef<number>(Date.now());
-  const timerRef = useRef<number | null>(null);
-
-  const totalTime = question.timeLimit || 20;
   const progressPercent = Math.round(((questionIndex + 1) / totalQuestions) * 100);
-  const timePercent = Math.max(0, Math.min(100, (timeLeft / totalTime) * 100));
 
   // Reset states when question changes
   useEffect(() => {
-    setTimeLeft(question.timeLimit || 20);
     setIsAnswered(false);
     setSelectedOption(null);
     setSubmittedResult(null);
     setIsSubmitting(false);
     startTimeRef.current = Date.now();
-
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return 0;
-        }
-        if (prev <= 5) {
-          sounds.playUrgentTick();
-        } else {
-          sounds.playTick();
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
   }, [question.id]);
-
-  // Handle timeout (auto submit no answer)
-  useEffect(() => {
-    if (timeLeft === 0 && !isAnswered && !isSubmitting) {
-      handleSelectOption(-1);
-    }
-  }, [timeLeft, isAnswered, isSubmitting]);
 
   const handleSelectOption = async (index: number) => {
     if (isAnswered || isSubmitting) return;
 
-    if (timerRef.current) clearInterval(timerRef.current);
     setIsSubmitting(true);
     setSelectedOption(index);
     setIsAnswered(true);
@@ -190,28 +155,14 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
       {/* Main Question Box */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-6">
         
-        {/* Timer row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className={`h-5 w-5 ${timeLeft <= 5 ? 'text-rose-500 animate-bounce' : 'text-slate-400'}`} />
-            <span className={`text-base font-black tracking-tight ${timeLeft <= 5 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
-              {timeLeft}s remaining
-            </span>
-          </div>
-
+        {/* Points Info Header */}
+        <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+            Multiple Choice
+          </span>
           <div className="text-xs font-bold text-slate-500 dark:text-slate-400">
-            Up to +{(question.points || 1000).toLocaleString()} pts
+            +{(question.points || 1000).toLocaleString()} pts for correct answer
           </div>
-        </div>
-
-        {/* Linear Timer Indicator */}
-        <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-1000 rounded-full ${
-              timeLeft <= 5 ? 'bg-rose-500' : timeLeft <= 10 ? 'bg-amber-500' : 'bg-emerald-500'
-            }`}
-            style={{ width: `${timePercent}%` }}
-          />
         </div>
 
         {/* Question Heading */}
@@ -294,7 +245,7 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
                 ) : (
                   <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
                     <XCircle className="h-5 w-5" />
-                    {selectedOption === -1 ? 'Time Expired!' : 'Incorrect!'}
+                    Incorrect!
                   </span>
                 )}
               </div>
@@ -302,7 +253,7 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
               {submittedResult && (
                 <div className="flex items-center gap-1 text-xs font-black text-indigo-600 dark:text-indigo-400">
                   <Zap className="h-4 w-4 fill-current" />
-                  <span>+{submittedResult.scoreEarned.toLocaleString()} Points</span>
+                  <span>+{submittedResult.pointsAwarded.toLocaleString()} Points</span>
                 </div>
               )}
             </div>
@@ -338,3 +289,4 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
     </div>
   );
 };
+

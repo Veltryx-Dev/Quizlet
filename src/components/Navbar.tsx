@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Volume2, VolumeX, Share2, Sparkles, Trophy, LogOut, Check, Radio } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Volume2, VolumeX, Share2, Sparkles, Trophy, LogOut, Check, Radio, Sun, Moon } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { getShareUrl } from '../utils/helpers';
+import { applyTheme, getInitialTheme, ThemeMode } from '../utils/theme';
 
 interface NavbarProps {
   roomCode?: string;
@@ -24,6 +25,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isMuted, setIsMuted] = useState(sounds.getIsMuted());
   const [copied, setCopied] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme());
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    const next: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+  };
 
   const toggleSound = () => {
     const next = sounds.toggleMute();
@@ -72,6 +84,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {/* Light / Dark Mode Toggle */}
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-4 w-4 text-amber-400" />
+            ) : (
+              <Moon className="h-4 w-4 text-slate-600" />
+            )}
+          </button>
+
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
