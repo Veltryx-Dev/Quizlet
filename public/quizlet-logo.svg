@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="quizletGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4257B2" />
+      <stop offset="100%" stop-color="#283593" />
+    </linearGradient>
+    <linearGradient id="sparkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3CCF91" />
+      <stop offset="100%" stop-color="#00C9A7" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="24" fill="url(#quizletGrad)" />
+  <!-- Stylized Q Inner Loop -->
+  <circle cx="48" cy="48" r="24" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" />
+  <!-- Q Tail Accent -->
+  <path d="M58 58 L76 76" stroke="#3CCF91" stroke-width="11" stroke-linecap="round" />
+  <circle cx="76" cy="76" r="4.5" fill="#3CCF91" />
+</svg>

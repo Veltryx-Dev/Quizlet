@@ -1,0 +1,6 @@
+{
+  "name": "Quizlet",
+  "description": "Interactive real-time quiz game, custom quiz builder with 4-choice questions, and synchronized live leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
