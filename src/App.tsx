@@ -396,26 +396,37 @@ export default function App() {
   };
 
   // Participant Advances to Next Question or Finishes
-  const handleParticipantNext = async () => {
-    if (!room || !participantId) return;
-    const currentParticipant = room.participants[participantId];
-    if (!currentParticipant) return;
+  const handleFinishQuiz = async () => {
+    if (!room || !participantId) {
+      setCurrentView('leaderboard');
+      return;
+    }
 
-    const answeredCount = Object.keys(currentParticipant.answers || {}).length;
-    const totalQuestions = room.quiz.questions.length;
+    try {
+      await fetch(`/api/rooms/${currentRoomCode}/finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId })
+      });
+    } catch {}
 
-    if (answeredCount >= totalQuestions) {
-      try {
-        await fetch(`/api/rooms/${currentRoomCode}/finish`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantId })
-        });
-      } catch {}
-      finishLocalParticipant(currentRoomCode, participantId);
+    const updated = finishLocalParticipant(currentRoomCode, participantId);
+    if (updated) setRoom(updated);
+    setCurrentView('leaderboard');
+  };
+
+  // Get current participant object
+  const currentParticipant = participantId && room?.participants ? room.participants[participantId] : null;
+
+  // Auto-redirect to leaderboard if room ended or participant marked finished
+  useEffect(() => {
+    if (room?.status === 'ended' && (currentView === 'playing' || currentView === 'lobby')) {
       setCurrentView('leaderboard');
     }
-  };
+    if (currentParticipant?.isFinished && currentView === 'playing') {
+      setCurrentView('leaderboard');
+    }
+  }, [room?.status, currentParticipant?.isFinished, currentView]);
 
   // Exit / Leave current room
   const handleExitRoom = () => {
@@ -429,11 +440,6 @@ export default function App() {
     setHostSecretId('');
     setCurrentView('entry');
   };
-
-  // Get current participant object
-  const currentParticipant = participantId && room?.participants ? room.participants[participantId] : null;
-  const currentQuestionIdx = currentParticipant ? Object.keys(currentParticipant.answers || {}).length : 0;
-  const currentQuestion = room?.quiz.questions[currentQuestionIdx] || room?.quiz.questions[0];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
@@ -485,16 +491,14 @@ export default function App() {
         )}
 
         {/* 3. Active Quiz Player */}
-        {currentView === 'playing' && room && currentQuestion && (
+        {currentView === 'playing' && room && (
           <QuizPlayer
-            question={currentQuestion}
-            questionIndex={currentQuestionIdx}
-            totalQuestions={room.quiz.questions.length}
+            questions={room.quiz.questions}
+            initialQuestionIndex={0}
             currentScore={currentParticipant?.totalScore || 0}
             currentStreak={currentParticipant?.currentStreak || 0}
             onSubmitAnswer={handleSubmitAnswer}
-            onNextQuestion={handleParticipantNext}
-            isLastQuestion={currentQuestionIdx + 1 >= room.quiz.questions.length}
+            onFinishQuiz={handleFinishQuiz}
           />
         )}
 
